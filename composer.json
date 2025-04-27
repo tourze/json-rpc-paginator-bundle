@@ -1,0 +1,31 @@
+{
+  "name": "tourze/json-rpc-paginator-bundle",
+  "description": "JsonRPC分页实现",
+  "type": "symfony-bundle",
+  "license": "MIT",
+  "require": {
+    "php": "^8.1",
+    "symfony/config": "^6.4",
+    "symfony/dependency-injection": "^6.4",
+    "symfony/http-kernel": "^6.4",
+    "symfony/framework-bundle": "^6.4",
+    "symfony/yaml": "^6.4 || ^7.1",
+    "knplabs/knp-components": "^4.4 || ^5.0",
+    "tourze/json-rpc-core": "^0.0.6",
+    "psr/log": "^3|^2|^1"
+  },
+  "autoload": {
+    "psr-4": {
+      "Tourze\\JsonRPCPaginatorBundle\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tourze\\JsonRPCPaginatorBundle\\Tests\\": "tests"
+    }
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^10.0"
+  }
+}
