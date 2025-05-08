@@ -1,25 +1,23 @@
-# JsonRPC Paginator Bundle
+# JsonRPC分页实现
 
-[English](README.md) | [中文](README.zh-CN.md)
+该包提供了一个简单的JsonRPC分页实现，可与Symfony项目集成。它依赖于KnpPaginatorBundle来处理底层分页功能。
 
-This bundle provides a simple JsonRPC pagination implementation that integrates with Symfony projects. It depends on KnpPaginatorBundle to handle the underlying pagination functionality.
-
-## Installation
+## 安装
 
 ```bash
 composer require tourze/json-rpc-paginator-bundle
 ```
 
-## Features
+## 功能
 
-- Supports Doctrine ORM query pagination
-- Supports query result formatting
-- Supports custom count callbacks
-- Provides empty list structure generation
+- 支持基于Doctrine ORM的查询分页
+- 支持查询结果格式化
+- 支持自定义计数回调
+- 提供空列表结构生成
 
-## Basic Usage
+## 基本用法
 
-Use the PaginatorTrait in your JsonRPC procedure class:
+在你的JsonRPC过程类中使用PaginatorTrait：
 
 ```php
 <?php
@@ -36,7 +34,7 @@ class UserProcedure
     use PaginatorTrait;
     
     #[JsonRPCMethod('user.list')]
-    #[MethodParam('keyword')]
+    #[MethodParam('查询关键字')]
     public string $keyword = '';
     
     public function execute(): array
@@ -55,26 +53,26 @@ class UserProcedure
                 'id' => $user->getId(),
                 'name' => $user->getName(),
                 'email' => $user->getEmail(),
-                // Other fields...
+                // 其他字段...
             ];
         });
     }
     
-    // Optional: Override default page size
+    // 可选：覆盖默认页大小
     protected function getDefaultPageSize(int $prevValue): int
     {
-        return 20; // Custom default page size
+        return 20; // 自定义默认页大小
     }
 }
 ```
 
-## Return Data Structure
+## 返回的数据结构
 
 ```json
 {
   "list": [
-    { "id": 1, "name": "User 1", "email": "user1@example.com" },
-    { "id": 2, "name": "User 2", "email": "user2@example.com" }
+    { "id": 1, "name": "用户1", "email": "user1@example.com" },
+    { "id": 2, "name": "用户2", "email": "user2@example.com" }
   ],
   "pagination": {
     "current": 1,
@@ -87,4 +85,4 @@ class UserProcedure
 
 ## License
 
-MIT
+MIT 
