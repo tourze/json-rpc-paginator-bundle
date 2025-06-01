@@ -7,8 +7,13 @@ services:
 #  Tourze\JsonRPCPaginatorBundle\EventSubscriber\:
 #    resource: '../../EventSubscriber/'
 
+  Knp\Component\Pager\ArgumentAccess\RequestArgumentAccess: ~
+
   # 分页工具
   Knp\Component\Pager\Paginator:
+    arguments:
+      - '@event_dispatcher'
+      - '@Knp\Component\Pager\ArgumentAccess\RequestArgumentAccess'
     public: true
   Knp\Component\Pager\PaginatorInterface:
     alias: Knp\Component\Pager\Paginator
