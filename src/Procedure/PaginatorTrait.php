@@ -70,7 +70,7 @@ trait PaginatorTrait
             'pagination' => [
                 'current' => $pagination->getCurrentPageNumber(),
                 'pageSize' => $pagination->getItemNumberPerPage(),
-                'total' => $counter ? $counter($queryBuilder, $pagination) : $pagination->getTotalItemCount(),
+                'total' => $counter !== null ? $counter($queryBuilder, $pagination) : $pagination->getTotalItemCount(),
                 'hasMore' => true,
             ],
         ];
