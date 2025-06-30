@@ -18,15 +18,15 @@ use Tourze\JsonRPC\Core\Attribute\MethodParam;
  */
 trait PaginatorTrait
 {
-    #[MethodParam('每页条数')]
+    #[MethodParam(description: '每页条数')]
     #[Assert\Range(min: 1, max: 2000)]
     public int $pageSize = 10;
 
-    #[MethodParam('当前页数')]
+    #[MethodParam(description: '当前页数')]
     #[Assert\Range(min: 1, max: 1000)]
     public int $currentPage = 1;
 
-    #[MethodParam('上一次拉取时，最后一条数据的主键ID')]
+    #[MethodParam(description: '上一次拉取时，最后一条数据的主键ID')]
     public ?int $lastId = null;
 
     #[Required]

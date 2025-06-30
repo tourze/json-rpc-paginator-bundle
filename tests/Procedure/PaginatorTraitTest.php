@@ -292,6 +292,7 @@ class PaginatorTraitTest extends TestCase
 
 /**
  * 用于测试的 PaginatorTrait 实现类
+ * @internal
  */
 class TestPaginator
 {
@@ -324,6 +325,7 @@ class TestPaginator
 
 /**
  * 模拟分页结果的类
+ * @internal
  */
 class MockPagination implements PaginationInterface, \IteratorAggregate
 {
