@@ -1,22 +1,22 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Tourze\JsonRPCPaginatorBundle\DependencyInjection;
 
-use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
-use Symfony\Component\DependencyInjection\Extension\Extension;
-use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
+use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
+use Tourze\SymfonyDependencyServiceLoader\AutoExtension;
 
-class JsonRPCPaginatorExtension extends Extension
+class JsonRPCPaginatorExtension extends AutoExtension implements PrependExtensionInterface
 {
-    public function load(array $configs, ContainerBuilder $container): void
+    protected function getConfigDir(): string
     {
-        $loader = new YamlFileLoader(
-            $container,
-            new FileLocator(__DIR__ . '/../Resources/config')
-        );
-        $loader->load('services.yaml');
+        return __DIR__ . '/../Resources/config';
+    }
 
+    public function prepend(ContainerBuilder $container): void
+    {
         if (!$container->hasExtension('knp_paginator')) {
             $container->prependExtensionConfig('knp_paginator', [
                 'convert_exception' => false,             // throw a 404 exception when an invalid page is requested
@@ -30,14 +30,14 @@ class JsonRPCPaginatorExtension extends Extension
                     'filter_field_name' => 'filterField', // filter field query parameter name
                     'filter_value_name' => 'filterValue',  // filter value query parameter name
                     'page_out_of_range' => 'ignore',      // ignore, fix, or throwException when the page is out of range
-                    'default_limit' => 10                 // default number of items per page
+                    'default_limit' => 10,                 // default number of items per page
                 ],
                 'template' => [
                     'pagination' => '@KnpPaginator/Pagination/sliding.html.twig',     // sliding pagination controls template
                     'rel_links' => '@KnpPaginator/Pagination/rel_links.html.twig',    // <link rel=...> tags template
                     'sortable' => '@KnpPaginator/Pagination/sortable_link.html.twig', // sort link template
-                    'filtration' => '@KnpPaginator/Pagination/filtration.html.twig'   // filters template
-                ]
+                    'filtration' => '@KnpPaginator/Pagination/filtration.html.twig',   // filters template
+                ],
             ]);
         }
     }
