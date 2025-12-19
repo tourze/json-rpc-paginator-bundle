@@ -8,32 +8,20 @@ use Doctrine\ORM\Query;
 use Doctrine\ORM\QueryBuilder;
 use Knp\Component\Pager\Pagination\PaginationInterface;
 use Knp\Component\Pager\PaginatorInterface;
-use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Contracts\Service\Attribute\Required;
-use Tourze\JsonRPC\Core\Attribute\MethodParam;
+use Tourze\JsonRPCPaginatorBundle\Param\PaginatorParamInterface;
 
 /**
- * 如果分页页数传入太多的话，可能会带来分页上的性能问题，一般来说我们都不太可能拉取那么多的数据，所以我这里直接限制了最大1000页
- * 如果有传入 lastId，则优先基于这个来查询.
+ * 分页处理 Trait
+ *
+ * 在新架构下，分页参数（pageSize, currentPage, lastId）应在 Param 类中定义。
+ * 该 Trait 仅提供分页处理方法，需要传入实现 PaginatorParamInterface 的 Param 对象。
  *
  * @see https://github.com/KnpLabs/knp-components/blob/master/docs/pager/intro.md#custom-data-repository-pagination
  * @see https://blog.51cto.com/u_12592884/2697559
- *
- * @phpstan-ignore trait.unused
  */
 trait PaginatorTrait
 {
-    #[MethodParam(description: '每页条数')]
-    #[Assert\Range(min: 1, max: 2000)]
-    public int $pageSize = 10;
-
-    #[MethodParam(description: '当前页数')]
-    #[Assert\Range(min: 1, max: 1000)]
-    public int $currentPage = 1;
-
-    #[MethodParam(description: '上一次拉取时，最后一条数据的主键ID')]
-    public ?int $lastId = null;
-
     #[Required]
     public PaginatorInterface $paginator;
 
@@ -52,14 +40,22 @@ trait PaginatorTrait
      *
      * @return array<string, mixed>
      */
-    protected function fetchList(Query|QueryBuilder $queryBuilder, callable $formatter, ?callable $counter = null): array
-    {
-        $pageSize = $this->getDefaultPageSize($this->pageSize);
-        $pagination = $this->paginator->paginate($queryBuilder, $this->currentPage, $pageSize);
+    protected function fetchList(
+        Query|QueryBuilder $queryBuilder,
+        callable $formatter,
+        ?callable $counter = null,
+        ?PaginatorParamInterface $param = null,
+    ): array {
+        // 为了向后兼容，如果未传入 param，尝试使用旧的属性（如果存在）
+        $pageSize = $this->resolvePaginatorPageSize($param);
+        $currentPage = $this->resolvePaginatorCurrentPage($param);
+
+        $pageSize = $this->getDefaultPageSize($pageSize);
+        $pagination = $this->paginator->paginate($queryBuilder, $currentPage, $pageSize);
 
         return [
             'list' => $this->formatPaginationItems($pagination, $formatter),
-            'pagination' => $this->buildPaginationInfo($pagination, $queryBuilder, $counter),
+            'pagination' => $this->buildPaginationInfo($pagination, $queryBuilder, $counter, $param),
         ];
     }
 
@@ -108,8 +104,12 @@ trait PaginatorTrait
      *
      * @return array<string, mixed>
      */
-    private function buildPaginationInfo(object $pagination, Query|QueryBuilder $queryBuilder, ?callable $counter): array
-    {
+    private function buildPaginationInfo(
+        object $pagination,
+        Query|QueryBuilder $queryBuilder,
+        ?callable $counter,
+        ?PaginatorParamInterface $param = null,
+    ): array {
         $currentPage = $pagination->getCurrentPageNumber();
         $itemsPerPage = $pagination->getItemNumberPerPage();
         $totalItems = null !== $counter ? $counter($queryBuilder, $pagination) : $pagination->getTotalItemCount();
@@ -127,16 +127,75 @@ trait PaginatorTrait
      *
      * @return array<string, mixed>
      */
-    protected function emptyList(): array
+    protected function emptyList(?PaginatorParamInterface $param = null): array
     {
+        $currentPage = $this->resolvePaginatorCurrentPage($param);
+        $pageSize = $this->resolvePaginatorPageSize($param);
+
         return [
             'list' => [],
             'pagination' => [
-                'current' => $this->currentPage,
-                'pageSize' => $this->pageSize,
+                'current' => $currentPage,
+                'pageSize' => $pageSize,
                 'total' => 0,
                 'hasMore' => false,
             ],
         ];
+    }
+
+    /**
+     * 解析分页大小
+     *
+     * 支持两种方式：
+     * 1. 调用 $param->getPageSize() 方法
+     * 2. 访问 $param->pageSize 属性
+     */
+    private function resolvePaginatorPageSize(?PaginatorParamInterface $param): int
+    {
+        if (null !== $param) {
+            // 优先使用 getter 方法（推荐方式）
+            if (method_exists($param, 'getPageSize')) {
+                return $param->getPageSize();
+            }
+            // 回退到属性访问（向后兼容）
+            if (property_exists($param, 'pageSize')) {
+                return $param->pageSize;
+            }
+        }
+
+        // 向后兼容：检查 Trait 使用者的旧属性
+        if (property_exists($this, 'pageSize')) {
+            return $this->pageSize;
+        }
+
+        return 10;
+    }
+
+    /**
+     * 解析当前页码
+     *
+     * 支持两种方式：
+     * 1. 调用 $param->getCurrentPage() 方法
+     * 2. 访问 $param->currentPage 属性
+     */
+    private function resolvePaginatorCurrentPage(?PaginatorParamInterface $param): int
+    {
+        if (null !== $param) {
+            // 优先使用 getter 方法（推荐方式）
+            if (method_exists($param, 'getCurrentPage')) {
+                return $param->getCurrentPage();
+            }
+            // 回退到属性访问（向后兼容）
+            if (property_exists($param, 'currentPage')) {
+                return $param->currentPage;
+            }
+        }
+
+        // 向后兼容：检查 Trait 使用者的旧属性
+        if (property_exists($this, 'currentPage')) {
+            return $this->currentPage;
+        }
+
+        return 1;
     }
 }

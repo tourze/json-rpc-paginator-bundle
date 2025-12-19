@@ -4,33 +4,28 @@ declare(strict_types=1);
 
 namespace Tourze\JsonRPCPaginatorBundle\Tests\Procedure;
 
-use Doctrine\ORM\Query;
-use Doctrine\ORM\QueryBuilder;
 use Knp\Component\Pager\PaginatorInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tourze\JsonRPCPaginatorBundle\Procedure\PaginatorTrait;
+use Tourze\PHPUnitSymfonyKernelTest\AbstractIntegrationTestCase;
 
 /**
- * PaginatorTrait 的单元测试.
+ * PaginatorTrait 的集成测试.
  *
  * @internal
  */
 #[CoversClass(PaginatorTrait::class)]
-final class PaginatorTraitTest extends TestCase
+#[RunTestsInSeparateProcesses]
+final class PaginatorTraitTest extends AbstractIntegrationTestCase
 {
-    private TestPaginator $paginator;
+    private TestPaginatorService $service;
 
-    /** @var PaginatorInterface&MockObject */
-    private PaginatorInterface $knpPaginator;
-
-    protected function setUp(): void
+    protected function onSetUp(): void
     {
-        parent::setUp();
-        $this->knpPaginator = $this->createMock(PaginatorInterface::class);
-        $this->paginator = new TestPaginator();
-        $this->paginator->paginator = $this->knpPaginator;
+        // 创建测试服务并注入真实的 PaginatorInterface
+        $this->service = new TestPaginatorService();
+        $this->service->paginator = self::getService(PaginatorInterface::class);
     }
 
     /**
@@ -39,7 +34,7 @@ final class PaginatorTraitTest extends TestCase
     public function testGetDefaultPageSizeDefaultBehavior(): void
     {
         $pageSize = 25;
-        $result = $this->paginator->publicGetDefaultPageSize($pageSize);
+        $result = $this->service->publicGetDefaultPageSize($pageSize);
         $this->assertSame($pageSize, $result, '默认行为应返回相同的页大小值');
     }
 
@@ -48,17 +43,17 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testGetDefaultPageSizeCustomBehavior(): void
     {
-        // 创建一个自定义的 TestPaginator，覆盖 getDefaultPageSize 方法
-        $customPaginator = new class extends TestPaginator {
+        // 创建一个自定义的服务，覆盖 getDefaultPageSize 方法
+        $customService = new class extends TestPaginatorService {
             protected function getDefaultPageSize(int $prevValue): int
             {
                 return $prevValue * 2; // 返回两倍的值
             }
         };
-        $customPaginator->paginator = $this->knpPaginator;
+        $customService->paginator = self::getService(PaginatorInterface::class);
 
         $pageSize = 25;
-        $result = $customPaginator->publicGetDefaultPageSize($pageSize);
+        $result = $customService->publicGetDefaultPageSize($pageSize);
         $this->assertSame($pageSize * 2, $result, '自定义行为应返回两倍的页大小值');
     }
 
@@ -67,39 +62,27 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testFetchListBasicPagination(): void
     {
-        // 使用 Query 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 Query 对象，需要的对象有具体的实现
-        // 2. Query 类的方法在分页过程中被直接调用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 Query 类的集成交互方式
-        $query = $this->createMock(Query::class);
-
-        // 创建一个真实的MockPagination对象而不是模拟接口
+        // 准备测试数据
         $items = [['id' => 1], ['id' => 2], ['id' => 3]];
-        $pagination = new MockPagination($items, 1, 10, 25);
-
-        // 配置 KnpPaginator 模拟
-        $this->knpPaginator
-            ->expects($this->once())
-            ->method('paginate')
-            ->with($query, 1, 10)
-            ->willReturn($pagination)
-        ;
 
         // 设置格式化函数
         $formatter = function ($item) {
             return $item;
         };
 
-        // 执行方法
-        $result = $this->paginator->publicFetchList($query, $formatter);
+        // 创建分页参数
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
+
+        // 执行方法 - 使用数组作为目标（Knp Paginator 支持）
+        $result = $this->service->publicFetchListFromArray($items, $formatter, null, $param);
 
         // 断言
         /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
         $this->assertCount(3, $result['list']);
         $this->assertSame(1, $result['pagination']['current']);
         $this->assertSame(10, $result['pagination']['pageSize']);
-        $this->assertSame(25, $result['pagination']['total']);
-        $this->assertTrue($result['pagination']['hasMore']);
+        $this->assertSame(3, $result['pagination']['total']);
+        $this->assertFalse($result['pagination']['hasMore']); // 3 项在第 1 页，无更多内容
     }
 
     /**
@@ -107,28 +90,19 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testFetchListLastPage(): void
     {
-        // 使用 Query 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 Query 对象，需要的对象有具体的实现
-        // 2. Query 类的方法在分页过程中被直接调用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 Query 类的集成交互方式
-        $query = $this->createMock(Query::class);
+        // 准备测试数据 - 25 项，每页 10 项，第 3 页（最后一页）
+        $items = range(1, 25);
 
-        // 创建模拟分页对象，表示最后一页
-        $items = [['id' => 21], ['id' => 22], ['id' => 23], ['id' => 24], ['id' => 25]];
-        $pagination = new MockPagination($items, 3, 10, 25);
-
-        // 配置 KnpPaginator 模拟
-        $this->knpPaginator
-            ->method('paginate')
-            ->willReturn($pagination)
-        ;
+        // 创建分页参数
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 3);
 
         // 执行方法
-        $result = $this->paginator->publicFetchList($query, fn ($item) => $item);
+        $result = $this->service->publicFetchListFromArray($items, fn ($item) => ['id' => $item], null, $param);
 
         // 断言 hasMore 为 false，因为这是最后一页
         /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
         $this->assertFalse($result['pagination']['hasMore']);
+        $this->assertCount(5, $result['list']); // 最后一页只有 5 项
     }
 
     /**
@@ -136,17 +110,8 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testFetchListWithTraversableResults(): void
     {
-        // 使用 Query 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 Query 对象，需要的对象有具体的实现
-        // 2. Query 类的方法在分页过程中被直接调用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 Query 类的集成交互方式
-        $query = $this->createMock(Query::class);
-
-        // 原始数据项
+        // 准备测试数据
         $items = [['id' => 1], ['id' => 2]];
-        $pagination = new MockPagination($items, 1, 10, 25);
-
-        $this->knpPaginator->method('paginate')->willReturn($pagination);
 
         // 返回可遍历结果的格式化函数
         $formatter = function ($item) {
@@ -158,7 +123,10 @@ final class PaginatorTraitTest extends TestCase
             ]);
         };
 
-        $result = $this->paginator->publicFetchList($query, $formatter);
+        // 创建分页参数
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
+
+        $result = $this->service->publicFetchListFromArray($items, $formatter, null, $param);
 
         // 每个原始项都应生成 2 个格式化项，总共应有 4 个项
         /** @var array{list: list<array{name: string}>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
@@ -174,17 +142,8 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testFetchListWithNonArrayResults(): void
     {
-        // 使用 Query 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 Query 对象，需要的对象有具体的实现
-        // 2. Query 类的方法在分页过程中被直接调用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 Query 类的集成交互方式
-        $query = $this->createMock(Query::class);
-
-        // 原始数据项
+        // 准备测试数据
         $items = [1, 2, 3];
-        $pagination = new MockPagination($items, 1, 10, 25);
-
-        $this->knpPaginator->method('paginate')->willReturn($pagination);
 
         // 返回非数组结果的格式化函数（如字符串或 null）
         $formatter = function ($item) {
@@ -198,7 +157,10 @@ final class PaginatorTraitTest extends TestCase
             return null; // 返回 null，应被忽略
         };
 
-        $result = $this->paginator->publicFetchList($query, $formatter);
+        // 创建分页参数
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
+
+        $result = $this->service->publicFetchListFromArray($items, $formatter, null, $param);
 
         // 只有第一项应该被添加到列表中
         /** @var array{list: list<array{id: int}>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
@@ -211,17 +173,8 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testFetchListWithCustomCounter(): void
     {
-        // 使用 QueryBuilder 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 QueryBuilder 对象，需要的对象有具体的实现
-        // 2. QueryBuilder 类的方法在分页过程中被直接谂用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 QueryBuilder 类的集成交互方式
-        $query = $this->createMock(QueryBuilder::class);
-
-        // 原始数据项
+        // 准备测试数据
         $items = [['id' => 1], ['id' => 2]];
-        $pagination = new MockPagination($items, 1, 10, 99);
-
-        $this->knpPaginator->method('paginate')->willReturn($pagination);
 
         // 自定义计数器函数
         $counter = function ($query, $pagination) {
@@ -229,10 +182,14 @@ final class PaginatorTraitTest extends TestCase
             return 50;
         };
 
-        $result = $this->paginator->publicFetchList(
-            $query,
+        // 创建分页参数
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
+
+        $result = $this->service->publicFetchListFromArray(
+            $items,
             fn ($item) => $item,
-            $counter
+            $counter,
+            $param
         );
 
         // 应使用自定义计数器返回的总数
@@ -241,67 +198,26 @@ final class PaginatorTraitTest extends TestCase
     }
 
     /**
-     * 测试使用 QueryBuilder 作为参数.
-     */
-    public function testFetchListWithQueryBuilder(): void
-    {
-        // 使用 QueryBuilder 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 QueryBuilder 对象，需要的对象有具体的实现
-        // 2. QueryBuilder 类的方法在分页过程中被直接谂用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 QueryBuilder 类的集成交互方式
-        $queryBuilder = $this->createMock(QueryBuilder::class);
-
-        // 原始数据项
-        $items = [['id' => 1], ['id' => 2]];
-        $pagination = new MockPagination($items, 1, 10, 25);
-
-        $this->knpPaginator
-            ->expects($this->once())
-            ->method('paginate')
-            ->with($queryBuilder, 1, 10)
-            ->willReturn($pagination)
-        ;
-
-        $result = $this->paginator->publicFetchList($queryBuilder, fn ($item) => $item);
-
-        /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
-        $this->assertCount(2, $result['list']);
-    }
-
-    /**
      * 测试自定义页大小.
      */
     public function testFetchListWithCustomPageSize(): void
     {
-        // 使用 Query 具体类的原因：
-        // 1. KnpPaginator 的 paginate 方法直接接受 Query 对象，需要的对象有具体的实现
-        // 2. Query 类的方法在分页过程中被直接调用，需要类的完整行为
-        // 3. 测试需要验证 PaginatorTrait 与 Query 类的集成交互方式
-        $query = $this->createMock(Query::class);
+        // 准备测试数据
+        $items = [['id' => 1]];
 
-        // 创建一个自定义的 TestPaginator 覆盖 getDefaultPageSize
-        $customPaginator = new class extends TestPaginator {
+        // 创建一个自定义的服务覆盖 getDefaultPageSize
+        $customService = new class extends TestPaginatorService {
             protected function getDefaultPageSize(int $prevValue): int
             {
                 return 20; // 始终返回 20，不考虑输入值
             }
         };
-        $customPaginator->paginator = $this->knpPaginator;
-        $customPaginator->pageSize = 10; // 设置初始页大小为 10
+        $customService->paginator = self::getService(PaginatorInterface::class);
 
-        // 原始数据项
-        $items = [['id' => 1]];
-        $pagination = new MockPagination($items, 1, 20, 50);
+        // 创建分页参数，初始页大小为 10
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
 
-        // KnpPaginator 应该使用自定义的页大小
-        $this->knpPaginator
-            ->expects($this->once())
-            ->method('paginate')
-            ->with($query, 1, 20) // 页大小应该是 20，不是 10
-            ->willReturn($pagination)
-        ;
-
-        $result = $customPaginator->publicFetchList($query, fn ($item) => $item);
+        $result = $customService->publicFetchListFromArray($items, fn ($item) => $item, null, $param);
 
         /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
         $this->assertSame(20, $result['pagination']['pageSize']);
@@ -312,7 +228,10 @@ final class PaginatorTraitTest extends TestCase
      */
     public function testEmptyListDefaultValues(): void
     {
-        $result = $this->paginator->publicEmptyList();
+        // 创建默认分页参数
+        $param = new TestPaginatorParam();
+
+        $result = $this->service->publicEmptyList($param);
 
         /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
         $this->assertEmpty($result['list']);
@@ -328,10 +247,9 @@ final class PaginatorTraitTest extends TestCase
     public function testEmptyListCustomValues(): void
     {
         // 设置自定义分页参数
-        $this->paginator->currentPage = 3;
-        $this->paginator->pageSize = 25;
+        $param = new TestPaginatorParam(pageSize: 25, currentPage: 3);
 
-        $result = $this->paginator->publicEmptyList();
+        $result = $this->service->publicEmptyList($param);
 
         /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
         $this->assertEmpty($result['list']);
@@ -339,5 +257,41 @@ final class PaginatorTraitTest extends TestCase
         $this->assertSame(25, $result['pagination']['pageSize']);
         $this->assertSame(0, $result['pagination']['total']);
         $this->assertFalse($result['pagination']['hasMore']);
+    }
+
+    /**
+     * 测试向后兼容：不传入 param 时使用默认值
+     */
+    public function testBackwardCompatibilityWithoutParam(): void
+    {
+        // 准备测试数据
+        $items = [['id' => 1]];
+
+        // 不传入 param
+        $result = $this->service->publicFetchListFromArray($items, fn ($item) => $item);
+
+        /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
+        $this->assertCount(1, $result['list']);
+        $this->assertSame(1, $result['pagination']['current']);
+        $this->assertSame(10, $result['pagination']['pageSize']);
+    }
+
+    /**
+     * 测试多页数据的 hasMore 标志
+     */
+    public function testFetchListHasMoreWithMultiplePages(): void
+    {
+        // 准备测试数据 - 25 项
+        $items = range(1, 25);
+
+        // 创建分页参数 - 第 1 页，每页 10 项
+        $param = new TestPaginatorParam(pageSize: 10, currentPage: 1);
+
+        $result = $this->service->publicFetchListFromArray($items, fn ($item) => ['id' => $item], null, $param);
+
+        /** @var array{list: list<mixed>, pagination: array{current: int, pageSize: int, total: int, hasMore: bool}} $result */
+        $this->assertTrue($result['pagination']['hasMore']); // 还有第 2、3 页
+        $this->assertCount(10, $result['list']);
+        $this->assertSame(25, $result['pagination']['total']);
     }
 }
